@@ -1,0 +1,117 @@
+# this conf for setting up Interruption sqs queue for karpenter spot instances.
+
+# 1. The Secure SQS Queue
+resource "aws_sqs_queue" "karpenter_interruption" {
+  name = "${var.cluster_name}-karpenter-interruption"
+  
+  # 🚨 Enterprise Standard: Message retention is only 5 minutes (300s). 
+  # Interruption events are ephemeral; if Karpenter doesn't act immediately, 
+  # the node is already dead.
+  message_retention_seconds = 300
+  
+  # 🚨 Enterprise Security: Enable Server-Side Encryption (SSE-SQS)
+  sqs_managed_sse_enabled = true
+}
+
+# 2. The SQS Queue Policy (Security Guardrails)
+resource "aws_sqs_queue_policy" "karpenter_interruption" {
+  queue_url = aws_sqs_queue.karpenter_interruption.id
+  policy    = data.aws_iam_policy_document.karpenter_queue_policy.json
+}
+
+data "aws_iam_policy_document" "karpenter_queue_policy" {
+  # Allow EventBridge to send messages to the Queue
+  statement {
+    sid       = "AllowEventBridgeToSendMessage"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.karpenter_interruption.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+  }
+
+  # 🚨 Enforce TLS / HTTPS Only (Strict Compliance)
+  statement {
+    sid       = "DenyHTTP"
+    effect    = "Deny"
+    actions   = ["sqs:*"]
+    resources = [aws_sqs_queue.karpenter_interruption.arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+# 3. AWS EventBridge Rules & Targets
+locals {
+  events = {
+    "spot_interruption" = {
+      source = ["aws.ec2"]
+      detail_type = ["EC2 Spot Instance Interruption Warning"]
+    }
+    "rebalance_recommendation" = {
+      source = ["aws.ec2"]
+      detail_type = ["EC2 Instance Rebalance Recommendation"]
+    }
+    "instance_state_change" = {
+      source = ["aws.ec2"]
+      detail_type = ["EC2 Instance State-change Notification"]
+    }
+    "aws_health_event" = {
+      source = ["aws.health"]
+      detail_type = ["AWS Health Event"]
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "karpenter_events" {
+  for_each = local.events
+
+  name        = "${var.cluster_name}-karpenter-${each.key}"
+  description = "Karpenter interruption event rule for ${each.key}"
+  
+  event_pattern = jsonencode({
+    source      = each.value.source
+    detail-type = each.value.detail_type
+  })
+}
+
+resource "aws_cloudwatch_event_target" "karpenter_events" {
+  for_each = local.events
+
+  rule      = aws_cloudwatch_event_rule.karpenter_events[each.key].name
+  target_id = "KarpenterInterruptionQueueTarget"
+  arn       = aws_sqs_queue.karpenter_interruption.arn
+}
+
+#------------------------------
+# sqs permissions to Karpenter, for this we are not using sqs
+data "aws_iam_policy_document" "karpenter_controller_sqs" {
+  statement {
+    sid    = "AllowInterruptionQueueActions"
+    effect = "Allow"
+    actions = [
+      "sqs:DeleteMessage",
+      "sqs:GetQueueUrl",
+      "sqs:ReceiveMessage",
+      "sqs:GetQueueAttributes"
+    ]
+    # 🚨 Point this to the ARN of the queue you just created above
+    resources = [aws_sqs_queue.karpenter_interruption.arn]
+  }
+}
+
+# Attach this document to your Karpenter IAM Role
+resource "aws_iam_role_policy" "karpenter_sqs" {
+  name   = "KarpenterSQSInterruption"
+  role   = aws_iam_role.karpenter_controller.name # Change to your actual Karpenter role name
+  policy = data.aws_iam_policy_document.karpenter_controller_sqs.json
+}
