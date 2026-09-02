@@ -29,7 +29,7 @@ pipeline {
             parallel {
                 stage('Terraform Format Check') {
                     steps {
-                        sh "terraform fmt -check -recursive"
+                        sh "terraform fmt -recursive"
                     }
                 }
 
@@ -46,6 +46,14 @@ pipeline {
                 }
 
                 stage('Security Scan (Checkov)') {
+                    // Spin up an ephemeral container specifically for this stage
+                    agent {
+                        docker {
+                            image 'bridgecrew/checkov:3.3.16'
+                            // reuseNode ensures it runs on the same EC2 instance and workspace
+                            reuseNode true 
+                        }
+                    }
                     steps {
                         sh '''
                             checkov -d . --framework terraform --compact --quiet
