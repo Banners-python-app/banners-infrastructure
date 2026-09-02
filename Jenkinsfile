@@ -16,7 +16,7 @@ pipeline {
             steps {
                 checkout scm        // checkout repo
                 sh '''
-                    if ! command -v terraform &> /dev/null; then
+                    if ! command -v terraform > /dev/null 2>&1; then
                         echo "Kindly install Terraform on Jenkins agents first then try....!"
                         exit 1
                     fi
