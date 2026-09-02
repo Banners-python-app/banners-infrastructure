@@ -9,7 +9,7 @@ pipeline {
     environment {
         AWS_REGION = "us-east-1"
         TF_VERSION = "1.10"
-        TARGET_ENV = "${env.BRANCH_NAME == 'prod' : 'dev'}"
+        TARGET_ENV = "${env.BRANCH_NAME == 'prod' ? 'prod' : 'dev'}"
     }
     stages {
         stage('STAGE 1: Checkout & setup') {
@@ -17,49 +17,64 @@ pipeline {
                 checkout scm        // checkout repo
                 sh '''
                     if ! command -v terraform &> /dev/null; then
-                        echo "Kindly install Terraform on Jenkins agents first then try....!
+                        echo "Kindly install Terraform on Jenkins agents first then try....!"
                         exit 1
                     fi
                     echo "Terraform available going to next steps...!"
                    '''
             }
         }
-        stage ('STAGE 2: Terraform format check') {
-            steps{
-                sh "terraform fmt -recursive"       
-            // pipeline fail if any issue in tf file, recursive: depply scans all the dir
-            }     
-        }
-        stage ('STAGE 3: Terraform linting') {
-            steps{
-                sh "tflint -f compact"
-            // tflint will check and give result in compact fmt
+        // Parallel execution of independent static scans
+        stage('STAGE 2: Static Analysis & Security Audits') {
+            parallel {
+                stage('Terraform Format Check') {
+                    steps {
+                        sh "terraform fmt -check -recursive"
+                    }
+                }
+
+                stage('Terraform Linting') {
+                    steps {
+                        sh '''
+                            if command -v tflint &> /dev/null; then
+                                tflint -f compact
+                            else
+                                echo "Warning: tflint not installed, skipping."
+                            fi
+                        '''
+                    }
+                }
+
+                stage('Security Scan (Checkov)') {
+                    steps {
+                        sh '''
+                            if ! command -v checkov &> /dev/null; then
+                                echo "Error: Checkov is not installed on the agent."
+                                exit 1
+                            fi
+                            checkov -d . --framework terraform --compact --quiet
+                        '''
+                    }
+                }
             }
-        }
-        stage('STAGE 4: Scanning using checkov') {
-            steps{
-                sh '''
-                    if ! command -v checkov &> /dev/null; then
-                        echo "Error: chekov not installed kindly install"
-                        exit 1
-                    fi
-                    checkov -d . --framework=terraform
-                   '''
-            }
-            
         }
         stage('STAGE 5: Terraform plan') {
-            sh '''
+            steps {
+                sh '''
                 cd envs/${TARGET_ENV}
                 terraform init
                 terraform validate
                 terraform plan -no-color -out=tfplan > plan.txt
                ''' 
+            }
         }
         stage('STAGE 6: Publish plan and approval') {
+            when{
+                branch 'prod'
+            }
             steps{
                 script {
-                    archiveArtifacts artifact: 'envs/${TARGET_ENV}/plan.txt', allowEmptyArchive: false
+                    archiveArtifacts artifacts: 'envs/${TARGET_ENV}/plan.txt', allowEmptyArchive: false
                     echo "Plan generated and archived. Waiting for approval...!"
 
                     timeout(time: 1, unit: 'HOURS') {
@@ -71,6 +86,9 @@ pipeline {
             }
         }
         stage('STAGE 7: Terraform apply') {
+            when{
+                branch prod
+            }
             steps {
                 echo "Applying the terraform apply"
                 sh '''
@@ -85,7 +103,7 @@ pipeline {
             echo "Infra provisioned successfully"
         }
         failure {
-            error("Terraform pipeline failed! Check the console logs")
+            echo "Terraform pipeline failed! Check the console logs"
         }
         always {
             sh "rm -f envs/${TARGET_ENV}/tfplan envs/${TARGET_ENV}/plan.txt"
