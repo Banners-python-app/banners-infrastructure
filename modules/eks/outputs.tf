@@ -17,3 +17,8 @@ output "cluster_id" {
     description = "This is cluster ID"
     value = aws_eks_cluster.ban_eks_cluster.id
 }
+
+output "cluster_oidc_url" {
+    description = "OIDC url"
+    value = aws_eks_cluster.ban_eks_cluster.identity[0].oidc[0].issuer
+}

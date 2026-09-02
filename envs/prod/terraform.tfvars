@@ -8,7 +8,7 @@ cluster_name = "ban-cluster"
 node_groups = {
     # node group 1
     "node-1" = {
-    instance_types = ["t3.small", "c7i-flex.large"]
+    instance_types = ["c7i-flex.large"]
     desired_size   = 3
     min_size       = 1
     max_size       = 4

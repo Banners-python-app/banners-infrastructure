@@ -1,4 +1,5 @@
 # this eso permissions will be used in root so eso has proper permissions
+# here we not using IRSA n OIDC bcaz we are using pod identity
 
 # 1. Policy allowing ESO to read Secrets Manager & Decrypt KMS
 data "aws_iam_policy_document" "eso_permissions" {
@@ -6,8 +7,10 @@ data "aws_iam_policy_document" "eso_permissions" {
     sid     = "AllowSecretsManagerRead"
     effect  = "Allow"
     actions = [
+      "secretsmanager:GetResourcePolicy",
       "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecretVersionIds"
     ]
     # Scoped to your project's secret path
     resources = var.target_secret_arns

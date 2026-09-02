@@ -68,7 +68,7 @@ resource "aws_eks_cluster" "ban_eks_cluster" {
       resources = ["secrets"]
     }
 
-    depends_on = [ aws_iam_role.cluster_role, aws_kms_key.eks ]
+    depends_on = [ aws_iam_role.cluster_role, aws_kms_key.eks, aws_cloudwatch_log_group.eks ]
 }
 
 #------------------------
@@ -237,7 +237,7 @@ resource "aws_eks_pod_identity_association" "s3_csi_driver" {
 
 ###########
 # EBS CSI setup using old std enterprise way IRSA
-# To IRSA to work our cluster act as identity provider to AWS IAM. When we create cluster we get OIDC issuer url
+# To IRSA to work, our cluster act as identity provider to AWS IAM. When we create cluster we get OIDC issuer url
 # fetch cluster's TLS certificate
 data "tls_certificate" "eks" {
     url = aws_eks_cluster.ban_eks_cluster.identity[0].oidc[0].issuer

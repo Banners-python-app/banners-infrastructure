@@ -88,3 +88,15 @@ variable "repository_name" {
     description = "ECR repo name"
 }
 
+variable "aws_region" {
+    type = string
+    description = "Region"
+    default = "us-east-1"
+}
+
+variable "aws_account_id" {
+    type = string
+    description = "AC ID"
+    sensitive = true
+    default = "059325865650"
+}

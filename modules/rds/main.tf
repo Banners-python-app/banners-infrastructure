@@ -63,7 +63,7 @@ resource "aws_db_subnet_group" "rds_subnet" {
 # custom parameter group (enforce SSL/TLS)
 resource "aws_db_parameter_group" "secure_postgres" {
     name = "${var.identifier}-secure-pg"
-    family = "postgres15"
+    family = "postgres18"
     description = "Custom parameter group enforcing SSL for ${var.identifier}"
 
     parameter {
@@ -72,7 +72,7 @@ resource "aws_db_parameter_group" "secure_postgres" {
     }           
     parameter {
       name = "log_connections"
-      value = "1"       # auditing requirement
+      value = "all"       # auditing requirement
     } 
     parameter {
     name  = "log_disconnections"
@@ -145,7 +145,6 @@ resource "aws_db_instance" "this" {
     lifecycle {
       ignore_changes = [ 
         password, # Prevents Terraform from overwriting password if rotated later
-        latest_restorable_time
        ]
     }
 }
