@@ -36,7 +36,7 @@ pipeline {
                 stage('Terraform Linting') {
                     steps {
                         sh '''
-                            if command -v tflint &> /dev/null; then
+                            if command -v tflint > /dev/null 2>&1; then
                                 tflint -f compact
                             else
                                 echo "Warning: tflint not installed, skipping."
@@ -48,10 +48,6 @@ pipeline {
                 stage('Security Scan (Checkov)') {
                     steps {
                         sh '''
-                            if ! command -v checkov &> /dev/null; then
-                                echo "Error: Checkov is not installed on the agent."
-                                exit 1
-                            fi
                             checkov -d . --framework terraform --compact --quiet
                         '''
                     }
