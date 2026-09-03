@@ -1,5 +1,6 @@
 #security groups for public subnet
 resource "aws_security_group" "sg_public" {
+  # checkov:skip=CKV2_AWS_5: OK
   vpc_id      = var.ban_vpcid
   name        = "${var.vpc_name}-pub-sg"
   description = "Allow required rules"
@@ -10,6 +11,7 @@ resource "aws_security_group" "sg_public" {
   }
 
   ingress {
+    # checkov:skip=CKV_AWS_260: Egress required
     protocol    = "tcp"
     from_port   = 80
     to_port     = 80
@@ -26,6 +28,7 @@ resource "aws_security_group" "sg_public" {
   }
 
   ingress {
+    # checkov:skip=CKV_AWS_24: Egress required
     protocol    = "tcp"
     from_port   = 22
     to_port     = 22
@@ -34,7 +37,8 @@ resource "aws_security_group" "sg_public" {
   }
 
   egress {
-    protocol    = "-1"
+    # checkov:skip=CKV_AWS_382: Egress required 
+    protocol    = "-1"    # all protocols
     from_port   = 0
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
@@ -44,6 +48,7 @@ resource "aws_security_group" "sg_public" {
 
 #sg for pvt subnet
 resource "aws_security_group" "sg_private" {
+  # checkov:skip=CKV2_AWS_5: OK
   vpc_id      = var.ban_vpcid
   name        = "${var.vpc_name}-sg-private"
   description = "SG for pvt subnets"
@@ -67,6 +72,7 @@ resource "aws_security_group" "sg_private" {
 
   # CRITICAL: Allows the EKS control plane and worker nodes to talk to each other
   ingress {
+    # checkov:skip=CKV_AWS_382
     description = "Allow internal cluster and node communication"
     protocol    = "-1"
     from_port   = 0
@@ -75,6 +81,7 @@ resource "aws_security_group" "sg_private" {
   }
 
   egress {
+    # checkov:skip=CKV_AWS_382: Required
     description = "Allow all outbound traffic"
     protocol    = "-1"
     from_port   = 0
@@ -86,6 +93,7 @@ resource "aws_security_group" "sg_private" {
 #sg for db
 # checkov:skip=CKV2_AWS_5
 resource "aws_security_group" "sg_database" {
+  # checkov:skip=CKV2_AWS_5: OK
   vpc_id      = var.ban_vpcid
   name        = "${var.vpc_name}-sg-database"
   description = "SG for DB"

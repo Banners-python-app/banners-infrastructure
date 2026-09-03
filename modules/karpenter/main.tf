@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 # Karp node role
 data "aws_iam_policy_document" "node_assume_role" {
     statement {
@@ -66,39 +68,85 @@ resource "aws_iam_role" "karpenter_controller" {
 }
 
 data "aws_iam_policy_document" "karp_controller_policy" {
+    # Read actions
     statement {
-      effect = "Allow"
-      actions = [ 
-      "ec2:RunInstances",
-      "ec2:CreateFleet",
-      "ec2:CreateTags",
-      "ec2:TerminateInstances",
-      "ec2:DescribeLaunchTemplates",
-      "ec2:DeleteLaunchTemplate",
-      "ec2:DescribeInstances",
-      "ec2:DescribeInstanceTypes",
-      "ec2:DescribeSpotPriceHistory",
-      "ec2:DescribeInstanceTypeOfferings",
-      "ec2:DescribeSubnets",
-      "ec2:DescribeSecurityGroups",
-      "ec2:DescribeImages",
-      "ec2:CreateLaunchTemplate",
-      "ssm:GetParameter",
-      "pricing:GetProducts",
-      "eks:DescribeCluster",
-      "iam:CreateInstanceProfile",  
-      "iam:GetInstanceProfile",
-      "iam:AddRoleToInstanceProfile",
-      "iam:RemoveRoleFromInstanceProfile",
-      "iam:DeleteInstanceProfile",
-      "iam:TagInstanceProfile"
-       ]
-       resources = [ "*" ]
+        sid = "AllowReadActions"
+        effect = "Allow"
+        actions = [ 
+            "ec2:DescribeLaunchTemplates",
+            "ec2:DescribeInstances",
+            "ec2:DescribeInstanceTypes",
+            "ec2:DescribeSpotPriceHistory",
+            "ec2:DescribeInstanceTypeOfferings",
+            "ec2:DescribeSubnets",
+            "ec2:DescribeSecurityGroups",
+            "ec2:DescribeImages",
+            "pricing:GetProducts",
+            "eks:DescribeCluster"
+         ]
+        resources = [ "*" ]
+    } 
+
+    # SSM AMI fetch
+    statement {
+        sid = "AllowSSMRead"
+        effect = "Allow"
+        actions = ["ssm:GetParameter"]
+        # Only allow fetching AWS-managed EKS AMI parameters (prevents stealing company secrets)
+        resources = ["arn:aws:ssm:${data.aws_region.current.name}::parameter/aws/service/eks/*"]
     }
+
+    # EC2 provisioning
     statement {
-      effect = "Allow"
-      actions = ["iam:PassRole", "iam:ListInstanceProfiles"]
-      resources = [ aws_iam_role.karpenter_node.arn, aws_iam_instance_profile.karpenter_profile.arn ]
+        # checkov:skip=CKV_AWS_111: Karpenter inherently requires write access to provision nodes.
+        # checkov:skip=CKV_AWS_356: EC2 RunInstances requires * resource due to complex interdependent ARNs (subnets, SGs)
+        sid = "AllowEC2Provisioning"
+        effect = "Allow"
+        actions = [ 
+            "ec2:RunInstances",
+            "ec2:CreateFleet",
+            "ec2:CreateTags",
+            "ec2:TerminateInstances",
+            "ec2:CreateLaunchTemplate",
+            "ec2:DeleteLaunchTemplate"
+         ]
+        resources = [ "*" ]
+        # SECURITY GUARDRAIL: Karpenter can ONLY create/delete nodes explicitly tagged for this cluster
+        condition {
+            test     = "StringEquals"
+            variable = "aws:RequestTag/kubernetes.io/cluster/${var.cluster_name}"
+            values   = ["owned"]
+        }
+        condition {
+            test     = "StringEquals"
+            variable = "aws:RequestTag/karpenter.sh/discovery"
+            values   = [var.cluster_name]
+        }
+    }
+    
+    # IAM INSTANCE PROFILE MANAGEMENT
+    statement {
+        # checkov:skip=CKV_AWS_109: Karpenter dynamically generates Instance Profiles for worker nodes.
+        sid    = "AllowIAMProfileManagement"
+        effect = "Allow"
+        actions = [
+            "iam:CreateInstanceProfile",
+            "iam:GetInstanceProfile",
+            "iam:AddRoleToInstanceProfile",
+            "iam:RemoveRoleFromInstanceProfile",
+            "iam:DeleteInstanceProfile",
+            "iam:TagInstanceProfile"
+        ]
+        # Scoped to your specific AWS account instead of "*"
+        resources = ["arn:aws:iam::059325865650:instance-profile/*"]
+    }
+
+    # pass role
+    statement {
+        sid = "AllowPassRole"
+        effect = "Allow"
+        actions = ["iam:PassRole", "iam:ListInstanceProfiles"]
+        resources = [ aws_iam_role.karpenter_node.arn, aws_iam_instance_profile.karpenter_profile.arn ]
     }
 }
 
