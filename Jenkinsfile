@@ -50,8 +50,9 @@ pipeline {
                     agent {
                         docker {
                             image 'bridgecrew/checkov:3.3.16'
-                            // reuseNode ensures it runs on the same EC2 instance and workspace
-                            reuseNode true 
+                            // Override the hardcoded entrypoint so Jenkins can inject 'cat'
+                            args '--entrypoint=""' 
+                            reuseNode true
                         }
                     }
                     steps {
