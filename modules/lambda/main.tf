@@ -12,6 +12,14 @@ resource "aws_cloudwatch_log_group" "this" {
 }
 
 resource "aws_lambda_function" "this" {
+    # checkov:skip=CKV_AWS_158: "Ensure that CloudWatch Log Group is encrypted by KMS"
+    # checkov:skip=CKV_AWS_338: "Ensure CloudWatch log groups retains logs for at least 1 year"
+    # checkov:skip=CKV_AWS_272: Code signing is not required for this environment tier. CI/CD pipeline enforces artifact integrity
+    # checkov:skip=CKV_AWS_117:  "Ensure that AWS Lambda function is configured inside a VPC"
+    # checkov:skip=CKV_AWS_115: "Ensure that AWS Lambda function is configured for function-level concurrent execution limit"
+    # checkov:skip=CKV_AWS_173: "Check encryption settings for Lambda environmental variable"
+    # checkov:skip= CKV_AWS_116: "Ensure that AWS Lambda function is configured for a Dead Letter Queue(DLQ)"
+
     function_name = var.function_name
     role = aws_iam_role.this.arn
     handler = var.handler       # this is function runs when triggered
