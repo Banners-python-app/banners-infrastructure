@@ -9,7 +9,7 @@ pipeline {
     environment {
         AWS_REGION = "us-east-1"
         TF_VERSION = "1.10"
-        TARGET_ENV = "${env.BRANCH_NAME == 'prod' ? 'prod' : 'dev'}"
+        TARGET_ENV = "${env.BRANCH_NAME == 'prod' ? 'prod' : 'prod'}"
     }
     stages {
         stage('STAGE 1: Checkout & setup') {
@@ -92,7 +92,7 @@ pipeline {
         }
         stage('STAGE 7: Terraform apply') {
             when{
-                branch prod
+                branch 'prod'
             }
             steps {
                 echo "Applying the terraform apply"
