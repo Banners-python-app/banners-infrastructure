@@ -93,7 +93,7 @@ data "aws_iam_policy_document" "karp_controller_policy" {
         effect = "Allow"
         actions = ["ssm:GetParameter"]
         # Only allow fetching AWS-managed EKS AMI parameters (prevents stealing company secrets)
-        resources = ["arn:aws:ssm:${data.aws_region.current.name}::parameter/aws/service/eks/*"]
+        resources = ["arn:aws:ssm:${data.aws_region.current.region}::parameter/aws/service/eks/*"]
     }
 
     # EC2 provisioning
