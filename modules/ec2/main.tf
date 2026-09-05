@@ -8,6 +8,7 @@ resource "aws_instance" "ec2_server" {
     iam_instance_profile = var.iam_instance_profile
     user_data = var.user_data
     associate_public_ip_address = var.public_ip
+    ebs_optimized = true
     # checkov:skip=CKV_AWS_126: Ensure detailed monitoring is enabled
     #monitoring = true
 

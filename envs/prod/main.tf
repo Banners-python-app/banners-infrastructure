@@ -47,7 +47,7 @@ module "karpenter" {
     env = var.env
     cluster_name = var.cluster_name
     cluster_endpoint = module.eks.cluster_endpoint
-    depends_on = [ module.eks ]
+    depends_on = [ module.eks, module.aws_lbc ]     # aws_lbc is dependency for karpenter
 }
 
 module "rds" {
@@ -88,5 +88,36 @@ module "eso_iam" {
     cluster_name = var.cluster_name
     target_secret_arns = [module.rds.secret_arn]
     kms_key_arn = [module.rds.kms_key_arn]
+    depends_on = [ module.eks, module.aws_lbc ]
 }
 
+###########----This is extra blocks showing how to created OIDS and IRSA for ESO-------
+# already above we used pod identity for ESO
+# creating IAM policy for ro acess to secrets manager for ESO
+#resource "aws_iam_policy" "eso_secret_policy" {
+#    name = "${var.env}-eso-secrets-manager-policy"
+#    description = "Allows External Secrets Operator to read database passwords"
+#    policy = jsonencode({
+#        Version = "2012-10-17",
+#        Statement = [
+#        {
+#            Effect = "Allow",
+#            Action = [
+#            "secretsmanager:GetResourcePolicy",
+#            "secretsmanager:GetSecretValue",
+#            "secretsmanager:DescribeSecret",
+#            "secretsmanager:ListSecretVersionIds"
+#            ],
+#            # Best Practice: Restrict this to the specific path where your app secrets live
+#            Resource = [
+#                # arn:aws:secretsmanager:us-east-1:123456789012:secret:prod/ban-rds/credentials-a1B2c3
+#                "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.env}/${var.identifier}/credentials-*"
+#            ]
+#            }
+#        ]
+#    })
+#}
+# use iam module if using IRSA for ESO or others
+#module "eso_irsa_iam" {
+#    source = "../../modules/eso_iam"
+#}

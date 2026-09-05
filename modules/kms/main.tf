@@ -3,12 +3,34 @@ data "aws_caller_identity" "current" {}
 
 # 2. The Strict KMS Key Policy
 data "aws_iam_policy_document" "kms" {
-  
+  # checkov:skip=CKV_AWS_109: This is a KMS Key Policy (Resource-Based), not an IAM Role Policy.
+  # checkov:skip=CKV_AWS_111: Write access is scoped to this specific key via Resource-Based Policy.
+  # checkov:skip=CKV_AWS_356: AWS explicitly requires the Resource to be '*' in KMS Key Policies to avoid circular dependencies.
   # Requirement 1: Allow IAM policies to grant access to the key
   statement {
     sid       = "EnableIAMUserPermissions"
     effect    = "Allow"
-    actions   = ["kms:*"]
+    actions   = [
+      "kms:Create*",
+      "kms:Describe*",
+      "kms:Enable*",
+      "kms:List*",
+      "kms:Put*",
+      "kms:Update*",
+      "kms:Revoke*",
+      "kms:Disable*",
+      "kms:Get*",
+      "kms:Delete*",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:ScheduleKeyDeletion",
+      "kms:CancelKeyDeletion",
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey"
+    ]
     resources = ["*"]
 
     principals {

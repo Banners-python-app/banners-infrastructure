@@ -1,14 +1,41 @@
 # first generating trust policy using data block
 data "aws_iam_policy_document" "trust_policy" {
-    statement {
-        effect = "Allow"
+    # for AWS services
+    dynamic "statement" {
+        # render this block if user provides service principals
+        for_each = length(var.trusted_service_principals) > 0 ? [1] : []
+        content {
+          effect = "Allow"
         actions = ["sts:AssumeRole"]
 
         principals {
           type = "Service"
           identifiers = var.trusted_service_principals
+            }
         }
-    } 
+    }
+
+    # IRSA for EKS (Federated OIDC)
+    dynamic "statement" {
+        # render this if OIDC config map if empty ignore
+        for_each = var.oicd_config
+
+        content {
+            effect  = "Allow"
+            actions = ["sts:AssumeRoleWithWebIdentity"]
+      
+        principals {
+            type        = "Federated"
+            identifiers = [statement.value.provider_arn]
+            }
+        
+        condition {
+            test     = "StringEquals"
+            variable = "${statement.value.provider_url}:sub"
+            values   = ["system:serviceaccount:${statement.value.namespace}:${statement.value.service_account}"]
+            }
+        }
+    }
 }
 
 # the core IAM role

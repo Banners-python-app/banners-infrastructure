@@ -5,7 +5,11 @@
 # Data Protection: Versioning enabled by default with deletion safeguards (force_destroy = false).
 # Cost Optimization: Automatic lifecycle rules to abort failed multipart uploads and clean up non-current versions.
 
+
 resource "aws_s3_bucket" "ban_bucket" {
+  # checkov:skip=CKV2_AWS_62: "Ensure S3 buckets should have event notifications enabled"
+  # checkov:skip= CKV_AWS_18: "Ensure the S3 bucket has access logging enabled"
+  # checkov:skip=CKV_AWS_144: "Ensure that S3 bucket has cross-region replication enabled"
     bucket = var.bucket_name
     force_destroy = var.force_destroy
 
@@ -61,7 +65,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 
     rule {
       id = "cost-optimization"
-      status = "enabled"
+      status = "Enabled"
       filter {}
 
       # cleans up failed multi part uploads

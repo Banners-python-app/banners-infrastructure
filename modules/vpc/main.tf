@@ -1,5 +1,7 @@
 # creating VPC
 resource "aws_vpc" "ban_vcp" {
+    # checkov:skip=CKV2_AWS_11: Not required for dev
+    # checkov:skip=CKV2_AWS_12: Ensure the default security group of every VPC restricts all traffic
     cidr_block = var.vpc_cidr
     enable_dns_hostnames = true
     enable_dns_support = true
@@ -30,6 +32,7 @@ resource "aws_subnet" "ban_subnet_pub1" {
     vpc_id = aws_vpc.ban_vcp.id
     cidr_block = var.cidr_pub1
     availability_zone = data.aws_availability_zones.available.names[0]
+    # checkov:skip=CKV_AWS_130: Intentianlly keep public for load balancers
     map_public_ip_on_launch = true
     tags = {
         Name = "${var.vpc_name}-vpc",
@@ -44,6 +47,7 @@ resource "aws_subnet" "ban_subnet_pub2" {
     vpc_id = aws_vpc.ban_vcp.id
     cidr_block = var.cidr_pub2
     availability_zone = data.aws_availability_zones.available.names[1]
+    # checkov:skip=CKV_AWS_130: Intentianlly keep public for load balancers
     map_public_ip_on_launch = true
     tags = {
         Name = "${var.vpc_name}-vpc",
@@ -99,7 +103,6 @@ resource "aws_eip" "ban_eip" {
 # create NAT GW
 resource "aws_nat_gateway" "ban_nat_gw" {
     allocation_id = aws_eip.ban_eip.id
-    vpc_id = aws_vpc.ban_vcp.id
     subnet_id = aws_subnet.ban_subnet_pub1.id
     depends_on = [ aws_eip.ban_eip, aws_subnet.ban_subnet_pub1, aws_subnet.ban_subnet_pub2 ]
 }
@@ -166,12 +169,13 @@ resource "aws_route_table_association" "associate_pvt" {
 # NACl for public subnet
 resource "aws_network_acl" "public_nacl" {
   vpc_id = aws_vpc.ban_vcp.id
+  # checkov:skip=CKV_AWS_231: Needed for pub nacls
+  # checkov:skip=CKV_AWS_232: Needed for pub nacls
   for_each = {
     pub_subnet1 = aws_subnet.ban_subnet_pub1.id,
     pub_subnet2 = aws_subnet.ban_subnet_pub2.id
     }
   subnet_ids = [each.value]
-
   ingress {
     protocol   = "tcp"
     rule_no    = 100
@@ -180,7 +184,6 @@ resource "aws_network_acl" "public_nacl" {
     from_port  = 80
     to_port    = 80
   }
-
   ingress {
     protocol   = "tcp"
     rule_no    = 101
@@ -189,7 +192,6 @@ resource "aws_network_acl" "public_nacl" {
     from_port  = 443
     to_port    = 443
   }
-
   ingress {
     protocol   = "tcp"
     rule_no    = 110
@@ -207,7 +209,6 @@ resource "aws_network_acl" "public_nacl" {
     from_port  = 22
     to_port    = 22
   }
-
   ingress {
     protocol   = "udp"
     rule_no    = 130

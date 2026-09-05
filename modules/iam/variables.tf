@@ -25,3 +25,14 @@ variable "custom_policy_arns" {
     type = map(string)
     #default = [] 
 }
+
+variable "oicd_config" {
+    description = "Configuration for EKS IRSA OIDC providers"
+    type = map(object({
+        provider_arn    = string
+        provider_url    = string
+        namespace       = string
+        service_account = string
+    }))
+    default = {}
+}

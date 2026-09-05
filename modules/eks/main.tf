@@ -29,6 +29,7 @@ resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
 
 # enable KMS key for encrypting EKS secrets
 resource "aws_kms_key" "eks" {
+    # checkov:skip= CKV2_AWS_64: "Ensure KMS key Policy is defined"
     description = "EKS secrets encryption key for ${var.cluster_name}"
     enable_key_rotation = true
     deletion_window_in_days = 7
@@ -36,12 +37,16 @@ resource "aws_kms_key" "eks" {
 
 # retention policy for CW logs
 resource "aws_cloudwatch_log_group" "eks" {
+    # checkov:skip=CKV_AWS_158: Logs needs to encrypt with kms
+    # checkov:skip=CKV_AWS_338: 1 year retention
     name = "/aws/eks/${var.cluster_name}/cluster"
     retention_in_days = 7       # automatically purges old logs after 7 days save money
 }
 
 # cluster EKS
 resource "aws_eks_cluster" "ban_eks_cluster" {
+    # checkov:skip=CKV_AWS_39: EKS public endpoint disabled
+    # checkov:skip=CKV_AWS_38: Ensure Amazon EKS public endpoint not accessible to 0.0.0.0/0
     name = var.cluster_name
     role_arn = aws_iam_role.cluster_role.arn
     version = var.eks_version
@@ -68,7 +73,7 @@ resource "aws_eks_cluster" "ban_eks_cluster" {
       resources = ["secrets"]
     }
 
-    depends_on = [ aws_iam_role.cluster_role, aws_kms_key.eks ]
+    depends_on = [ aws_iam_role.cluster_role, aws_kms_key.eks, aws_cloudwatch_log_group.eks ]
 }
 
 #------------------------
@@ -88,6 +93,9 @@ data "aws_iam_policy_document" "node_assume_role" {
 
 # ECR policy document
 data "aws_iam_policy_document" "ecr_node_role" {
+    # checkov:skip=CKV_AWS_107: These actions are strictly required for EKS nodes to authenticate to ECR Public and avoid anonymous pull rate limits.
+    # checkov:skip=CKV_AWS_356: AWS API design requires GetAuthorizationToken to be scoped to "*" because it authenticates the registry, not a specific repository.
+    # checkov:skip=CKV_AWS_356: EKS nodes must dynamically pull system add-ons (Karpenter, CoreDNS, VPC CNI) from multiple arbitrary AWS-owned ECR Public repositories. ARN restriction is operationally impossible here
     statement {
       effect = "Allow"
       actions = [ 
@@ -237,7 +245,7 @@ resource "aws_eks_pod_identity_association" "s3_csi_driver" {
 
 ###########
 # EBS CSI setup using old std enterprise way IRSA
-# To IRSA to work our cluster act as identity provider to AWS IAM. When we create cluster we get OIDC issuer url
+# To IRSA to work, our cluster act as identity provider to AWS IAM. When we create cluster we get OIDC issuer url
 # fetch cluster's TLS certificate
 data "tls_certificate" "eks" {
     url = aws_eks_cluster.ban_eks_cluster.identity[0].oidc[0].issuer

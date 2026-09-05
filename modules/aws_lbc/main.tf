@@ -1,12 +1,12 @@
 # down official IAM policy for load balancer
-data "http" "name" {
-    url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json"
-}
+#data "http" "name" {
+#    url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json"
+#}
 
 # create the policy
 resource "aws_iam_policy" "alb_policy" {
     name = "${var.cluster_name}-AWSLoadBalancerControllerIAMPolicy"
-    policy = data.http.name.response_body
+    policy = file("${path.module}/iam_policy.json")
     description = "Permissions for the AWS Load Balancer Controller"
 }
 

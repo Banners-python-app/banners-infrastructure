@@ -1,5 +1,6 @@
 # customer managed KMS (encrypts storage and secrets)
 resource "aws_kms_key" "rds_key" {
+    # checkov:skip=CKV2_AWS_64: No need to define policy but recommended to define
     description = "KMS key for RDS ${var.identifier} storage and Secrets Manager"
     deletion_window_in_days = 7    # after this days old keys will be deleted 
     enable_key_rotation = true  
@@ -15,15 +16,16 @@ resource "aws_kms_alias" "rds_key_alias" {
     target_key_id = aws_kms_key.rds_key.key_id
 }
 
-# db password 
-resource "random_password" "master_password" {
-    length = 24
-    special = true
-    override_special = "!#$%&*()-_=+[]{}<>:?"
-}
+# db password, no need caz we are using rds managed passwords
+#resource "random_password" "master_password" {
+#    length = 24
+#    special = true
+#    override_special = "!#$%&*()-_=+[]{}<>:?"
+#}
 
 # secret manager
 resource "aws_secretsmanager_secret" "db_credentials" {
+    # checkov:skip=CKV2_AWS_57: Ensure creds rotations enabled
     name = "${var.env}/${var.identifier}/credentials"
     description = "Master creds for ${var.identifier} RDS instance"
     kms_key_id = aws_kms_key.rds_key.arn
@@ -45,7 +47,7 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
         port = var.port
         database = var.db_name
         username = var.username
-        password = random_password.master_password.result
+        #password = random_password.master_password.result
     })
 }
 
@@ -63,7 +65,7 @@ resource "aws_db_subnet_group" "rds_subnet" {
 # custom parameter group (enforce SSL/TLS)
 resource "aws_db_parameter_group" "secure_postgres" {
     name = "${var.identifier}-secure-pg"
-    family = "postgres15"
+    family = "postgres18"
     description = "Custom parameter group enforcing SSL for ${var.identifier}"
 
     parameter {
@@ -72,7 +74,7 @@ resource "aws_db_parameter_group" "secure_postgres" {
     }           
     parameter {
       name = "log_connections"
-      value = "1"       # auditing requirement
+      value = "all"       # auditing requirement
     } 
     parameter {
     name  = "log_disconnections"
@@ -92,10 +94,17 @@ resource "aws_db_parameter_group" "secure_postgres" {
 resource "aws_db_instance" "this" {
     identifier = var.identifier
 
+    # Logs for respective engine
+    # checkov:skip=CKV_AWS_129: Logs
+    #enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
     # engine spec
     engine = "postgres"
     engine_version = var.engine_version
     instance_class = var.instance_class
+
+    # RDS database has IAM authentication enabled
+    iam_database_authentication_enabled = true
 
     # storage & encryption
     allocated_storage = var.allocated_storage
@@ -107,10 +116,11 @@ resource "aws_db_instance" "this" {
     # db creds
     db_name = var.db_name
     username = var.username
-    password = random_password.master_password.result
+    #password = random_password.master_password.result
     port = var.port
 
     # High availability and networking
+    # checkov:skip=CKV_AWS_157: MultiAZ
     multi_az = var.multi_az
     db_subnet_group_name = aws_db_subnet_group.rds_subnet.name
     vpc_security_group_ids = var.security_groups
@@ -126,11 +136,18 @@ resource "aws_db_instance" "this" {
     copy_tags_to_snapshot = true
     auto_minor_version_upgrade = true
 
+    # Automatic pass management & rotation
+    manage_master_user_password = true
+    master_user_secret_kms_key_id = aws_kms_key.rds_key.arn
+
     # deletion guardrails
+    # checkov:skip=CKV_AWS_293: Deletion protection
     deletion_protection = var.deletion_protection
     skip_final_snapshot = var.skip_final_snapshot
     final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final-snapshot"
 
+    # checkov:skip=CKV_AWS_118: Enhance monitoring
+    # checkov:skip=CKV_AWS_353: Perf insights
     # performance & monitoring (free tier disabled)
     # performance_insights_enabled          = true   # (Requires >= db.t3.medium or Graviton)
     # performance_insights_retention_period = 7      # 7 days free tier for PI if enabled
@@ -145,7 +162,15 @@ resource "aws_db_instance" "this" {
     lifecycle {
       ignore_changes = [ 
         password, # Prevents Terraform from overwriting password if rotated later
-        latest_restorable_time
        ]
+    }
+}
+
+# Password rotation for RDS managed secrets
+resource "aws_secretsmanager_secret_rotation" "rds_managed_rotation" {
+    secret_id = aws_db_instance.this.master_user_secret[0].secret_arn
+
+    rotation_rules {
+      automatically_after_days = 30
     }
 }

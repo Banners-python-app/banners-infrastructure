@@ -64,10 +64,7 @@ resource "helm_release" "argocd" {
 
       # Enterprise Ingress: Hooking it directly into your NGINX Controller
       ingress:
-        enabled: true
-        ingressClassName: "nginx" # or "alb" if using AWS Load Balancer Controller
-        hosts:
-          - argocd.yourcompany.com
+        enabled: false
 
     # ==========================================
     # 5. Repo Server (Heavy Workload)

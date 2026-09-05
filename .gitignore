@@ -4,3 +4,5 @@
 *.tfstate.*
 *.log
 *.hcl
+.helm/
+*.helm/
