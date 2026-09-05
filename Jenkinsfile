@@ -79,7 +79,7 @@ pipeline {
             }
             steps{
                 script {
-                    archiveArtifacts artifacts: 'envs/${TARGET_ENV}/plan.txt', allowEmptyArchive: false
+                    archiveArtifacts artifacts: "envs/${TARGET_ENV}/plan.txt", allowEmptyArchive: false
                     echo "Plan generated and archived. Waiting for approval...!"
 
                     timeout(time: 1, unit: 'HOURS') {
