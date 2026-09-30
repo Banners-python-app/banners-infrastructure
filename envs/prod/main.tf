@@ -86,7 +86,7 @@ module "eso_iam" {
     source = "../../modules/eso_iam"
     env = var.env
     cluster_name = var.cluster_name
-    target_secret_arns = [module.rds.secret_arn]
+    target_secret_arns = [module.rds.secret_arn, "arn:aws:secretsmanager:us-east-1:059325865650:secret:rds!db-e44fa755-a507-4226-adbf-b0a2c2793224-DKR7jP"]
     kms_key_arn = [module.rds.kms_key_arn]
     depends_on = [ module.eks, module.aws_lbc ]
 }

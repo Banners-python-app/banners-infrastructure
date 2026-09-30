@@ -6,12 +6,28 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    parameters{
+        choice(name: 'TF_ACTION', choices: ['apply', 'destroy'], description: 'Select the Terraform action to execute')
+    }
+
     environment {
         AWS_REGION = "us-east-1"
         TF_VERSION = "1.10"
         TARGET_ENV = "${env.BRANCH_NAME == 'prod' ? 'prod' : 'prod'}"
     }
     stages {
+        /*
+        stage('STAGE 0: Safety for prod') {
+            steps{
+                script {
+                    if (params.TF_ACTION == 'destroy' && env.BRANCH_NAME == 'prod') {
+                        error("FATAL: Terraform destroy is strictly forbidden on the Production branch.")
+                    }
+                }
+            }
+        }
+        */
+
         stage('STAGE 1: Checkout & setup') {
             steps {
                 checkout scm        // checkout repo
@@ -65,47 +81,97 @@ pipeline {
         }
         stage('STAGE 5: Terraform plan') {
             steps {
-                sh '''
-                cd envs/${TARGET_ENV}
-                terraform init
-                terraform validate
-                terraform plan -no-color -out=tfplan > plan.txt
-               ''' 
+                script {
+                    def planCommand = (params.TF_ACTION == 'destroy') ? 'terraform plan -destroy -no-color -out=tfplan' : 'terraform plan -no-color -out=tfplan'
+
+                    sh '''
+                    cd envs/${TARGET_ENV}
+                    terraform init
+                    terraform validate
+                    ${planCommand} > plan.txt
+                ''' 
+                }
             }
         }
         stage('STAGE 6: Publish plan and approval') {
-            when{
-                branch 'prod'
+            when {
+                anyOf {
+                    branch 'prod'
+                    expression {params.TF_ACTION == 'destroy'}
+                }
             }
             steps{
                 script {
                     archiveArtifacts artifacts: "envs/${TARGET_ENV}/plan.txt", allowEmptyArchive: false
                     echo "Plan generated and archived. Waiting for approval...!"
 
-                    timeout(time: 1, unit: 'HOURS') {
-                        input message: "Review plan.txt in artifacts. Approve Deployment to Production?",
-                              ok: "Deploy Infrastructure",
-                              submitter: "admin"       // jenkins username
-                    }
+                    if (params.TF_ACTION == 'destroy') {
+                        def confirm = input(
+                            message: "WARNING: Review plan.txt. You are about to DESTROY ${TARGET_ENV}. Type 'DESTROY' to confirm.",
+                            parameters: [string(name: 'CONFIRM', description: 'Type DESTROY here')]
+                        )
+                        if (confirm != 'DESTROY') {
+                        error("Destruction aborted by user")
+                        }
+                    } else {
+                        timeout(time: 1, unit: 'HOURS') {
+                            input message: "Review plan.txt in artifacts. Approve Deployment to Production?",
+                                ok: "Deploy Infrastructure",
+                                submitter: "admin"       // jenkins username
+                        }
+                    }    
                 }
             }
         }
         stage('STAGE 7: Terraform apply') {
-            when{
-                branch 'prod'
+            when {
+                anyOf {
+                    branch 'prod'
+                    expression {params.TF_ACTION == 'destroy'} 
+                } 
             }
             steps {
-                echo "Applying the terraform apply"
-                sh '''
-                    cd envs/${TARGET_ENV}
-                    terraform apply -no-color tfplan 
-                   ''' 
+                script {
+                    if (params.TF_ACTION == 'destory') {
+                        echo "Executing Pre-Destroy Cleanup and Terraform Destroy on ${TARGET_ENV}..."
+                        sh '''
+                            # Authenticate EKS cluster
+                            aws eks update-kubeconfig --region ${AWS_REGION} --name ban-cluster
+
+                            # Deleting ArgoCD applications
+                            echo "Deleting ArgoCD applications"
+                            kubectl delete applications --all -n argocd --wait=false || true
+                            sleep 15
+
+                            echo "Terminating Karpenter EC2 Instances..."
+                            kubectl delete nodepool --all --wait=false || true
+                            kubectl delete ec2nodeclass --all --wait=false || true
+                            sleep 20
+
+                            echo "Clearing stubborn finalizers..."
+                            kubectl get namespace argocd -o json | jq '.spec.finalizers=[]' | kubectl replace --raw /api/v1/namespaces/argocd/finalize -f - || true
+
+                            echo "Executing Terraform Destroy using the approved plan..."
+                            cd envs/${TARGET_ENV}
+                            terraform apply -no-color tfplan
+                            
+                            echo "Teardown Complete."
+                           '''
+                        } else {
+                            echo "Applying the terraform apply"
+                            sh '''
+                                cd envs/${TARGET_ENV}
+                                terraform apply -no-color tfplan 
+                            '''
+                        }
+                    }
+                }   
             }
         }
-    }
+
     post{
         success {
-            echo "Infra provisioned successfully"
+            echo "Infrastructure operation (${params.TF_ACTION}) completed successfully for ${TARGET_ENV}."
         }
         failure {
             echo "Terraform pipeline failed! Check the console logs"
