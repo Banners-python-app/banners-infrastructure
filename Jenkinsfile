@@ -82,14 +82,16 @@ pipeline {
         stage('STAGE 5: Terraform plan') {
             steps {
                 script {
-                    def planCommand = (params.TF_ACTION == 'destroy') ? 'terraform plan -destroy -no-color -out=tfplan' : 'terraform plan -no-color -out=tfplan'
+                    def planFlag = (params.TF_ACTION == 'destroy') ? '-destroy' : ''
 
-                    sh '''
+                    sh """
                     cd envs/${TARGET_ENV}
                     terraform init
                     terraform validate
-                    ${planCommand} > plan.txt
-                ''' 
+                    terraform plan ${planFlag} -input=false -no-color -out=tfplan
+
+                    terraform show -no-color tfplan > plan.txt
+                    """ 
                 }
             }
         }
@@ -132,9 +134,9 @@ pipeline {
             }
             steps {
                 script {
-                    if (params.TF_ACTION == 'destory') {
+                    if (params.TF_ACTION == 'destroy') {
                         echo "Executing Pre-Destroy Cleanup and Terraform Destroy on ${TARGET_ENV}..."
-                        sh '''
+                        sh """
                             # Authenticate EKS cluster
                             aws eks update-kubeconfig --region ${AWS_REGION} --name ban-cluster
 
@@ -156,13 +158,13 @@ pipeline {
                             terraform apply -no-color tfplan
                             
                             echo "Teardown Complete."
-                           '''
+                           """
                         } else {
                             echo "Applying the terraform apply"
-                            sh '''
+                            sh """
                                 cd envs/${TARGET_ENV}
                                 terraform apply -no-color tfplan 
-                            '''
+                            """
                         }
                     }
                 }   
